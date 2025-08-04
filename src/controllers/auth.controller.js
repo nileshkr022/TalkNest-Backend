@@ -11,55 +11,66 @@ export async function signup(req, res) {
     }
 
     if (password.length < 6) {
-      return res.status(400).json({ message: "Password must be at least 6 characters" });
+      return res.status(400).json({ message: "Password must be at least 6 characters long" });
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
     if (!emailRegex.test(email)) {
       return res.status(400).json({ message: "Invalid email format" });
     }
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({ message: "Email already exists, please use a diffrent one" });
+      return res.status(400).json({ message: "Email already exists. Please log in." });
     }
 
-    const idx = Math.floor(Math.random() * 100) + 1; // generate a num between 1-100
     const randomAvatar = `https://image-cdn.flowgpt.com/trans-images/avatars/TKoS7Pw6ys93xili83OBb/1707260506506.webp`;
 
+    // ✅ Create user
     const newUser = await User.create({
       email,
       fullName,
       password,
       profilePic: randomAvatar,
-    }); 
+      bio: "",
+      nativeLanguage: "",
+      learningLanguage: "",
+      location: "",
+    });
 
+    // ✅ Remove password from response
+    const userResponse = newUser.toObject();
+    delete userResponse.password;
+
+    // ✅ Stream Chat User
     try {
       await upsertStreamUser({
         id: newUser._id.toString(),
         name: newUser.fullName,
         image: newUser.profilePic || "",
       });
-      console.log(`Stream user created for ${newUser.fullName}`);
+      console.log(`✅ Stream user created for ${newUser.fullName}`);
     } catch (error) {
-      console.log("Error creating Stream user:", error);
+      console.log("⚠️ Error creating Stream user:", error.message);
     }
 
+    // ✅ JWT Token
     const token = jwt.sign({ userId: newUser._id }, process.env.JWT_SECRET_KEY, {
       expiresIn: "7d",
     });
 
+    // ✅ Cookie Settings (important for cross-domain Netlify + Render)
     res.cookie("jwt", token, {
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      httpOnly: true, // prevent XSS attacks,
-      sameSite: "strict", // prevent CSRF attacks
-      secure: process.env.NODE_ENV === "production",
+      httpOnly: true,
+      secure: true, // must be true in production with HTTPS
+      sameSite: "none", // ✅ allow cross-site cookies
     });
 
-    res.status(201).json({ success: true, user: newUser });
+    // ✅ Send Response
+    res.status(201).json({ success: true, user: userResponse });
   } catch (error) {
-    console.log("Error in signup controller", error);
+    console.error("❌ Error in signup controller:", error.message);
     res.status(500).json({ message: "Internal Server Error" });
   }
 }
@@ -67,7 +78,6 @@ export async function signup(req, res) {
 export async function login(req, res) {
   try {
     const { email, password } = req.body;
-
     if (!email || !password) {
       return res.status(400).json({ message: "All fields are required" });
     }
@@ -84,50 +94,40 @@ export async function login(req, res) {
 
     res.cookie("jwt", token, {
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      httpOnly: true, // prevent XSS attacks,
-      sameSite: "strict", // prevent CSRF attacks
-      secure: process.env.NODE_ENV === "production",
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
     });
 
-    res.status(200).json({ success: true, user });
+    const userResponse = user.toObject();
+    delete userResponse.password;
+
+    res.status(200).json({ success: true, user: userResponse });
   } catch (error) {
-    console.log("Error in login controller", error.message);
+    console.log("❌ Error in login controller:", error.message);
     res.status(500).json({ message: "Internal Server Error" });
   }
 }
 
 export function logout(req, res) {
-  res.clearCookie("jwt");
+  res.clearCookie("jwt", { sameSite: "none", secure: true });
   res.status(200).json({ success: true, message: "Logout successful" });
 }
 
 export async function onboard(req, res) {
   try {
     const userId = req.user._id;
-
     const { fullName, bio, nativeLanguage, learningLanguage, location } = req.body;
 
     if (!fullName || !bio || !nativeLanguage || !learningLanguage || !location) {
-      return res.status(400).json({
-        message: "All fields are required",
-        missingFields: [
-          !fullName && "fullName",
-          !bio && "bio",
-          !nativeLanguage && "nativeLanguage",
-          !learningLanguage && "learningLanguage",
-          !location && "location",
-        ].filter(Boolean),
-      });
+      return res.status(400).json({ message: "All fields are required" });
     }
 
     const updatedUser = await User.findByIdAndUpdate(
       userId,
-      {
-        ...req.body,
-        isOnboarded: true,
-      },
+      { fullName, bio, nativeLanguage, learningLanguage, location, isOnboarded: true },
       { new: true }
-    );
+    ).select("-password");
 
     if (!updatedUser) return res.status(404).json({ message: "User not found" });
 
@@ -137,14 +137,13 @@ export async function onboard(req, res) {
         name: updatedUser.fullName,
         image: updatedUser.profilePic || "",
       });
-      console.log(`Stream user updated after onboarding for ${updatedUser.fullName}`);
     } catch (streamError) {
-      console.log("Error updating Stream user during onboarding:", streamError.message);
+      console.log("⚠️ Stream update error:", streamError.message);
     }
 
     res.status(200).json({ success: true, user: updatedUser });
   } catch (error) {
-    console.error("Onboarding error:", error);
+    console.error("❌ Onboarding error:", error.message);
     res.status(500).json({ message: "Internal Server Error" });
   }
 }
