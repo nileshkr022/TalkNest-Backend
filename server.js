@@ -38,4 +38,13 @@ app.use("/api/friends", friendroutes);
 //   });
 // }
 
+app.get("/", (req, res) => {
+  res.send("✅ TalkNest Backend is running on Render!");
+});
+
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", message: "Backend is live!" });
+});
+
+
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
