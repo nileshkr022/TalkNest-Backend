@@ -25,10 +25,11 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
-app.use("/api/auth", authRoutes);
-app.use("/api/users", userRoutes);
-app.use("/api/chat", chatRoutes);
-app.use("/api/friends", friendroutes);
+app.use("/auth", authRoutes);
+app.use("/users", userRoutes);
+app.use("/chat", chatRoutes);
+app.use("/friends", friendroutes);
+
 
 // if (process.env.NODE_ENV === "production") {
 //   app.use(express.static(path.join(__dirname, "../frontend/dist")));
