@@ -18,13 +18,13 @@ const __dirname = path.resolve();
 const startServer = async () => {
   await connectDB();
 
-  // ✅ CORS Configuration
-  app.use(
-    cors({
-      origin: process.env.CLIENT_URL || "*",
-      credentials: true,
-    })
-  );
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL || "https://talknestbynilesh.netlify.app",
+    credentials: true,
+  })
+);
+
 
   // ✅ Middleware
   app.use(express.json());
